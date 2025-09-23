@@ -36,12 +36,12 @@ pipeline {
             }
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: "DeploymentSSHKey", keyFileVariable: 'keyFile')]) {
+                    // Copy docker-compose.yml ke server
+                    sh 'scp -i ${keyFile} -o StrictHostKeyChecking=no docker-compose.yml ubuntu@192.168.1.119:/home/ubuntu/docker-compose.yml'
+                    // Login Docker di server
                     sh 'ssh -i ${keyFile} -o StrictHostKeyChecking=no ubuntu@192.168.1.119 "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"'
-                    sh 'ssh -i ${keyFile} -o StrictHostKeyChecking=no ubuntu@192.168.1.119 docker pull miskiv/vuln-bank'
-                    sh 'ssh -i ${keyFile} -o StrictHostKeyChecking=no ubuntu@192.168.1.119 docker rm --force mongodb'
-                    sh 'ssh -i ${keyFile} -o StrictHostKeyChecking=no ubuntu@192.168.1.119 docker run --detach --name mongodb -p 27017:27017 mongo:3'
-                    sh 'ssh -i ${keyFile} -o StrictHostKeyChecking=no ubuntu@192.168.1.119 docker rm --force vuln-bank'
-                    sh 'ssh -i ${keyFile} -o StrictHostKeyChecking=no ubuntu@192.168.1.119 docker run -it --detach --name vuln-bank --network host miskiv/vuln-bank'
+                    // Jalankan docker-compose up --build -d di server
+                    sh 'ssh -i ${keyFile} -o StrictHostKeyChecking=no ubuntu@192.168.1.119 "cd /home/ubuntu && docker-compose up --build -d"'
                 }
             }
         }
