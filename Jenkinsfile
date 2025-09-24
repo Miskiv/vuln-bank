@@ -7,11 +7,11 @@ pipeline {
         stage('Build') {
             agent {
                 docker {
-                    image 'node:lts-buster-slim'
+                    image 'python:3.9-slim'
                 }               
             }
             steps {
-                sh 'npm install'
+                sh 'pip install --no-cache-dir -r requirements.txt'
             }
         }
         stage('Build Docker Image and Push to Docker Registry') {
