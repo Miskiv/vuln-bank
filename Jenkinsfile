@@ -5,11 +5,7 @@ pipeline {
     }
     stages {
         stage('Build') {
-            agent {
-                docker {
-                    image 'python:3.9-slim'
-                }               
-            }
+            agent any            
             steps {
                 sh 'pip install --no-cache-dir -r requirements.txt'
             }
