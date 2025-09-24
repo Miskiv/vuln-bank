@@ -7,7 +7,7 @@ pipeline {
         stage('Build') {
             agent any            
             steps {
-                sh 'pip install --no-cache-dir -r requirements.txt'
+                sh 'pip3 install --no-cache-dir -r requirements.txt'
             }
         }
         stage('Build Docker Image and Push to Docker Registry') {
