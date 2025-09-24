@@ -20,6 +20,8 @@ pipeline {
                     image 'docker:dind'
                     args '--user root -v /var/run/docker.sock:/var/run/docker.sock'
                 }
+		environment {
+                DOCKER_TLS_CERTDIR = ""
             }
             steps {
                 sh 'docker build -t miskiv/vuln-bank .'
