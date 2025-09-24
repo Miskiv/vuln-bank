@@ -8,11 +8,12 @@ pipeline {
             agent {            
             	docker {
 		    image 'python:3.9-slim'
+            	}
             }
-        }
-	steps {
-	    sh 'pip3 install --no-cache-dir -r requirements.txt'
-	}
+	    steps {
+	    	sh 'pip3 install --no-cache-dir -r requirements.txt'
+	    }
+	}	
         stage('Build Docker Image and Push to Docker Registry') {
             agent {
                 docker {
