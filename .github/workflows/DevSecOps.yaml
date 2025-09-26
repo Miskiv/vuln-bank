@@ -1,0 +1,89 @@
+name: DevSecOps Security Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  security-scan:
+    runs-on: self-hosted  
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python 3.9.13
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9.13'
+
+      - name: Upgrade pip to 22.0.4
+        run: |
+          python -m pip install --upgrade pip==22.0.4
+
+      # ======================
+      # LOCAL INSTALLATION STEPS
+      # ======================
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Create uploads directory
+        run: |
+          mkdir -p static/uploads
+
+      - name: Update .env file
+        run: |
+          sed -i 's/DB_HOST=db/DB_HOST=localhost/' .env
+
+      - name: Run Flask App in Background
+        run: |
+          source venv/bin/activate
+          nohup python app.py > app.log 2>&1 &
+          sleep 10
+
+      # ======================
+      # SECURITY SCANNING
+      # ======================
+      - name: Run Gitleaks
+        run: |
+          gitleaks detect --source=. --report-path=gitleaks-report.json || true
+
+      - name: Run pip-audit
+        run: |
+          source venv/bin/activate
+          pip install pip-audit
+          pip-audit -r requirements.txt -f json -o sca-report.json || true
+
+      - name: Run Bandit
+        run: |
+          source venv/bin/activate
+          pip install bandit
+          bandit -r . -f json -o bandit-report.json || true
+
+      - name: Run Dockle
+        run: |
+          docker run --rm -v $(pwd):/app goodwithtech/dockle:latest /app/Dockerfile || true
+
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.7.0
+        with:
+          target: "http://localhost:5000"
+        continue-on-error: true
+
+      # ======================
+      # SAVE REPORTS
+      # ======================
+      - name: Upload scan reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            gitleaks-report.json
+            sca-report.json
+            bandit-report.json
+            app.log
