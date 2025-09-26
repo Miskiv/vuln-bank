@@ -79,7 +79,7 @@ jobs:
       # SAVE REPORTS
       # ======================
       - name: Upload scan reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-reports
           path: |
@@ -87,3 +87,4 @@ jobs:
             sca-report.json
             bandit-report.json
             app.log
+
