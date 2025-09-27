@@ -90,18 +90,21 @@ jobs:
           path: .
 
       - name: Run Gitleaks
-        run: .\gitleaks\gitleaks.exe detect --source=. --report-path=gitleaks-report.json || true
+        continue-on-error: true
+        run: .\gitleaks\gitleaks.exe detect --source=. --report-path=gitleaks-report.json
 
       - name: Run pip-audit
-        run: py -m pip_audit -r requirements.txt -f json -o sca-report.json || true
+        continue-on-error: true
+        run: py -m pip_audit -r requirements.txt -f json -o sca-report.json
 
       - name: Run Bandit
-        run: py -m bandit -r . -f json -o bandit-report.json || true
+        continue-on-error: true
+        run: py -m bandit -r . -f json -o bandit-report.json
         
       - name: Run Trivy (Misconfiguration)
-        run: .\trivy\trivy.exe config . --format json --output trivy-dockerfile-report.json || true
+        continue-on-error: true
+        run: .\trivy\trivy.exe config . --format json --output trivy-dockerfile-report.json
 
-      # Langkah baru: Memastikan file laporan ada sebelum diunggah
       - name: Ensure Reports Exist
         run: |
           if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
@@ -118,8 +121,7 @@ jobs:
             sca-report.json
             bandit-report.json
             trivy-dockerfile-report.json
-
-  # ======================
+# ======================
   # 4️⃣ RUN DAST SCAN
   # ======================
   dast-scan:
@@ -136,6 +138,11 @@ jobs:
         run: |
           Start-Process python -ArgumentList "app.py"
           Start-Sleep -Seconds 15
+
+      - name: Add Git Bash to PATH for ZAP action
+        run: |
+          # Menambahkan lokasi tools (seperti 'touch') dari Git ke PATH
+          echo "C:\Program Files\Git\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Run OWASP ZAP Baseline Scan
         continue-on-error: true
