@@ -55,13 +55,17 @@ jobs:
       - name: Install Bandit
         run: py -m pip install bandit
 
+      - name: Install Trivy
+        run: |
+          Invoke-WebRequest -Uri https://github.com/aquasecurity/trivy/releases/download/v0.42.1/trivy_0.42.1_Windows-64bit.zip -OutFile trivy.zip
+          Expand-Archive -Path trivy.zip -DestinationPath .\trivy -Force
+
       # ======================
       # 4️⃣ SECURITY SCANNING (lanjut walau ada finding)
       # ======================
       - name: Run Gitleaks
         continue-on-error: true
         run: .\gitleaks\gitleaks.exe detect --source=. --report-path=gitleaks-report.json
-
 
       - name: Run pip-audit
         continue-on-error: true
@@ -71,9 +75,10 @@ jobs:
         continue-on-error: true
         run: py -m bandit -r . -f json -o bandit-report.json
 
-      - name: Run Dockle
+      - name: Run Trivy (scan Dockerfile)
         continue-on-error: true
-        run: docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile
+        run: .\trivy\trivy.exe config . --format json --output trivy-dockerfile-report.json
+
 
       - name: Run OWASP ZAP Baseline Scan
         continue-on-error: true
@@ -89,6 +94,7 @@ jobs:
           if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
           if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
           if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
+          if (!(Test-Path "trivy-dockerfile-report.json")) { '{}' | Out-File trivy-dockerfile-report.json }
           if (!(Test-Path "app.log")) { '' | Out-File app.log }
 
       - name: Upload Scan Reports
@@ -99,4 +105,5 @@ jobs:
             gitleaks-report.json
             sca-report.json
             bandit-report.json
+            trivy-dockerfile-report.json
             app.log
