@@ -59,7 +59,7 @@ jobs:
 
       - name: Install Trivy
         run: |
-          Invoke-WebRequest -Uri https://github.com/aqu-asecurity/trivy/releases/download/v0.42.1/trivy_0.42.1_Windows-64bit.zip -OutFile trivy.zip
+          Invoke-WebRequest -Uri https://github.com/aquasecurity/trivy/releases/download/v0.42.1/trivy_0.42.1_Windows-64bit.zip -OutFile trivy.zip
           Expand-Archive -Path trivy.zip -DestinationPath .\trivy -Force
 
       - name: Upload Tools Artifact
@@ -69,7 +69,6 @@ jobs:
           path: |
             .\gitleaks\
             .\trivy\
-            # Python tools are installed globally, so no need to upload them.
 
   # ======================
   # 3️⃣ RUN STATIC SCANS
@@ -101,6 +100,14 @@ jobs:
         
       - name: Run Trivy (Misconfiguration)
         run: .\trivy\trivy.exe config . --format json --output trivy-dockerfile-report.json || true
+
+      # Langkah baru: Memastikan file laporan ada sebelum diunggah
+      - name: Ensure Reports Exist
+        run: |
+          if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
+          if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
+          if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
+          if (!(Test-Path "trivy-dockerfile-report.json")) { '{}' | Out-File trivy-dockerfile-report.json }
 
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
@@ -195,9 +202,6 @@ jobs:
               CRITICAL_FOUND="true"
               NOTIFICATION_MESSAGE+="• Kerentanan SCA (pip-audit) dengan tingkat HIGH terdeteksi.\n"
           fi
-          
-          # Catatan: Laporan DAST (ZAP) biasanya dalam HTML/Markdown, jadi Anda mungkin perlu parsing log
-          # dari ZAP untuk mendeteksi temuan kritis secara terprogram.
           
           if [ "$CRITICAL_FOUND" = "true" ]; then
               echo "Kerentanan critical ditemukan. Mengirim notifikasi ke Slack..."
