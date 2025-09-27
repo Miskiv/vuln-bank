@@ -1,103 +1,101 @@
 name: DevSecOps Security Pipeline - Only Scans
 
 on:
-push:
-branches: [ "main" ]
-pull_request:
-branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-security-scan:
-runs-on: self-hosted
+  security-scan:
+    runs-on: self-hosted
 
-steps:
+    steps:
 
-# ======================
-# 1️⃣ CHECKOUT REPOSITORY
-# ======================
-- name: Checkout Repository
-uses: actions/checkout@v4
+      # ======================
+      # 1️⃣ CHECKOUT REPOSITORY
+      # ======================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-# ======================
-# 2️⃣ SETUP PYTHON ENVIRONMENT
-# ======================
-- name: Install Python Dependencies
-run: |
-         py -m pip install --upgrade pip==22.0.4
-         py -m pip install -r requirements.txt
+      # ======================
+      # 2️⃣ SETUP PYTHON ENVIRONMENT
+      # ======================
+      - name: Install Python Dependencies
+        run: |
+          py -m pip install --upgrade pip==22.0.4
+          py -m pip install -r requirements.txt
 
-     - name: Create Uploads Directory
-run: |
-         if (!(Test-Path "static\uploads")) { New-Item -ItemType Directory -Path "static\uploads" }
+      - name: Create Uploads Directory
+        run: |
+          if (!(Test-Path "static\uploads")) { New-Item -ItemType Directory -Path "static\uploads" }
 
-     - name: Ensure .env File Exists
-run: |
-         if (!(Test-Path ".env")) {
-           Set-Content -Path ".env" -Value "DB_HOST=localhost`nDB_PORT=5432`nDB_USER=postgres`nDB_PASSWORD=postgres`nDB_NAME=vulnbank`nSECRET_KEY=supersecret"
-         }
+      - name: Ensure .env File Exists
+        run: |
+          if (!(Test-Path ".env")) {
+            Set-Content -Path ".env" -Value "DB_HOST=localhost`nDB_PORT=5432`nDB_USER=postgres`nDB_PASSWORD=postgres`nDB_NAME=vulnbank`nSECRET_KEY=supersecret"
+          }
 
-     - name: Update .env File for Localhost
-run: |
-         (Get-Content .env) -replace 'DB_HOST=db','DB_HOST=localhost' | Set-Content .env
+      - name: Update .env File for Localhost
+        run: |
+          (Get-Content .env) -replace 'DB_HOST=db','DB_HOST=localhost' | Set-Content .env
 
-     # ======================
-# 3️⃣ INSTALL SECURITY TOOLS
-# ======================
-- name: Install Gitleaks
-run: |
-         Invoke-WebRequest -Uri https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_windows_x64.zip -OutFile gitleaks.zip
-         Expand-Archive -Path gitleaks.zip -DestinationPath .\gitleaks -Force
-         $env:PATH += ";$PWD\gitleaks"
+      # ======================
+      # 3️⃣ INSTALL SECURITY TOOLS
+      # ======================
+      - name: Install Gitleaks
+        run: |
+          Invoke-WebRequest -Uri https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_windows_x64.zip -OutFile gitleaks.zip
+          Expand-Archive -Path gitleaks.zip -DestinationPath .\gitleaks -Force
+          $env:PATH += ";$PWD\gitleaks"
 
-     - name: Install pip-audit
-run: py -m pip install --upgrade pip-audit
+      - name: Install pip-audit
+        run: py -m pip install --upgrade pip-audit
 
-- name: Install Bandit
-run: py -m pip install bandit
+      - name: Install Bandit
+        run: py -m pip install bandit
 
-# ======================
-# 4️⃣ SECURITY SCANNING (lanjut walau ada finding)
-# ======================
-- name: Run Gitleaks
-continue-on-error: true
+      # ======================
+      # 4️⃣ SECURITY SCANNING (lanjut walau ada finding)
+      # ======================
+      - name: Run Gitleaks
+        continue-on-error: true
         run: gitleaks detect --source=. --report-path=gitleaks-report.json
-        run: .\gitleaks\gitleaks.exe detect --source=. --report-path=gitleaks-report.json
 
+      - name: Run pip-audit
+        continue-on-error: true
+        run: py -m pip_audit -r requirements.txt -f json -o sca-report.json
 
-- name: Run pip-audit
-continue-on-error: true
-run: py -m pip_audit -r requirements.txt -f json -o sca-report.json
+      - name: Run Bandit
+        continue-on-error: true
+        run: bandit -r . -f json -o bandit-report.json
 
-- name: Run Bandit
-continue-on-error: true
-run: bandit -r . -f json -o bandit-report.json
+      - name: Run Dockle
+        continue-on-error: true
+        run: docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile
 
-- name: Run Dockle
-continue-on-error: true
-run: docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile
+      - name: Run OWASP ZAP Baseline Scan
+        continue-on-error: true
+        uses: zaproxy/action-baseline@v0.7.0
+        with:
+          target: "http://localhost:5000"
 
-- name: Run OWASP ZAP Baseline Scan
-continue-on-error: true
-uses: zaproxy/action-baseline@v0.7.0
-with:
-target: "http://localhost:5000"
+      # ======================
+      # 5️⃣ UPLOAD REPORTS
+      # ======================
+      - name: Ensure Reports Exist
+        run: |
+          if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
+          if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
+          if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
+          if (!(Test-Path "app.log")) { '' | Out-File app.log }
 
-# ======================
-# 5️⃣ UPLOAD REPORTS
-# ======================
-- name: Ensure Reports Exist
-run: |
-         if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
-         if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
-         if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
-         if (!(Test-Path "app.log")) { '' | Out-File app.log }
-
-     - name: Upload Scan Reports
-uses: actions/upload-artifact@v4
-with:
-name: security-reports
-path: |
-           gitleaks-report.json
-           sca-report.json
-           bandit-report.json
-           app.log
+      - name: Upload Scan Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            gitleaks-report.json
+            sca-report.json
+            bandit-report.json
+            app.log
