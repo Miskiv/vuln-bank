@@ -60,7 +60,8 @@ jobs:
       # ======================
       - name: Run Gitleaks
         continue-on-error: true
-        run: gitleaks detect --source=. --report-path=gitleaks-report.json
+        run: .\gitleaks\gitleaks.exe detect --source=. --report-path=gitleaks-report.json
+
 
       - name: Run pip-audit
         continue-on-error: true
