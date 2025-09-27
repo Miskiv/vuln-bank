@@ -19,7 +19,7 @@ jobs:
       # ======================
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          py -m pip install -r requirements.txt
 
       - name: Create uploads directory
         run: |
@@ -45,13 +45,13 @@ jobs:
       - name: Run pip-audit
         run: |
           source venv/bin/activate
-          pip install pip-audit
+          py -m pip install pip-audit
           pip-audit -r requirements.txt -f json -o sca-report.json || true
 
       - name: Run Bandit
         run: |
           source venv/bin/activate
-          pip install bandit
+          py -m pip install bandit
           bandit -r . -f json -o bandit-report.json || true
 
       - name: Run Dockle
