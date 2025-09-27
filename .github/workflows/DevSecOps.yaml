@@ -1,4 +1,4 @@
-name: DevSecOps Security Pipeline
+name: DevSecOps Security Pipeline with Stages
 
 on:
   push:
@@ -7,41 +7,42 @@ on:
     branches: [ "main" ]
 
 jobs:
-  security-scan:
-    runs-on: self-hosted
 
+  # ======================
+  # STAGE 1: SETUP ENVIRONMENT
+  # ======================
+  setup:
+    runs-on: self-hosted
     steps:
-      # ======================
-      # CHECKOUT REPO
-      # ======================
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ======================
-      # INSTALL DEPENDENCIES
-      # ======================
-      - name: Install Python dependencies
+      - name: Install Python Dependencies
         run: |
           py -m pip install --upgrade pip==22.0.4
           py -m pip install -r requirements.txt
 
-      - name: Create uploads directory
+      - name: Create Uploads Directory
         run: |
           if (!(Test-Path "static\uploads")) { New-Item -ItemType Directory -Path "static\uploads" }
 
-      - name: Ensure .env file exists
+      - name: Ensure .env File Exists
         run: |
           if (!(Test-Path ".env")) {
             Set-Content -Path ".env" -Value "DB_HOST=localhost`nDB_PORT=5432`nDB_USER=postgres`nDB_PASSWORD=postgres`nDB_NAME=vulnbank`nSECRET_KEY=supersecret"
           }
 
-      - name: Update .env file
+      - name: Update .env File for Localhost
         run: |
           (Get-Content .env) -replace 'DB_HOST=db','DB_HOST=localhost' | Set-Content .env
 
-      # ======================
-      # RUN FLASK APP IN BACKGROUND
-      # ======================
+  # ======================
+  # STAGE 2: RUN FLASK APP & NGROK
+  # ======================
+  run-app:
+    runs-on: self-hosted
+    needs: setup
+    steps:
       - name: Install Ngrok
         run: |
           Invoke-WebRequest -Uri https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
@@ -49,6 +50,7 @@ jobs:
           $env:PATH += ";$PWD\ngrok"
 
       - name: Start Flask App and Ngrok
+        id: flask-ngrok
         run: |
           # Start Flask app
           Start-Process -FilePath "py" -ArgumentList "app.py" -NoNewWindow
@@ -60,11 +62,15 @@ jobs:
 
           # Get Ngrok public URL
           $ngrok_url = (Invoke-RestMethod http://127.0.0.1:4040/api/tunnels).tunnels[0].public_url
-          Write-Host "Ngrok Public URL: $ngrok_url"
+          echo "::set-output name=ngrok_url::$ngrok_url"
 
-      # ======================
-      # INSTALL SECURITY TOOLS
-      # ======================
+  # ======================
+  # STAGE 3: INSTALL SECURITY TOOLS
+  # ======================
+  install-tools:
+    runs-on: self-hosted
+    needs: run-app
+    steps:
       - name: Install Gitleaks
         run: |
           Invoke-WebRequest -Uri https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_windows_x64.zip -OutFile gitleaks.zip
@@ -79,12 +85,16 @@ jobs:
         run: |
           py -m pip install bandit
 
-      # ======================
-      # SECURITY SCANNING
-      # ======================
+  # ======================
+  # STAGE 4: SECURITY SCANNING
+  # ======================
+  security-scan:
+    runs-on: self-hosted
+    needs: install-tools
+    steps:
       - name: Run Gitleaks
         run: |
-          try { gitleaks detect --source=. --report-path=gitleaks-report.json } catch { Write-Host "Gitleaks failed" }
+          try { gitleaks detect --source=. --report-path=gitleaks-report.json } catch { Write-Host "Gitleaks scan failed" }
 
       - name: Run pip-audit
         run: |
@@ -104,17 +114,21 @@ jobs:
           target: "http://localhost:5000"
         continue-on-error: true
 
-      # ======================
-      # SAVE REPORTS
-      # ======================
-      - name: Ensure report files exist
+  # ======================
+  # STAGE 5: UPLOAD REPORTS
+  # ======================
+  upload-reports:
+    runs-on: self-hosted
+    needs: security-scan
+    steps:
+      - name: Ensure Reports Exist
         run: |
           if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
           if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
           if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
           if (!(Test-Path "app.log")) { '' | Out-File app.log }
 
-      - name: Upload scan reports
+      - name: Upload Scan Reports
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
@@ -123,3 +137,7 @@ jobs:
             sca-report.json
             bandit-report.json
             app.log
+
+      - name: Show Ngrok Public URL
+        run: |
+          Write-Host "Ngrok URL: ${{ needs.run-app.outputs.ngrok_url }}"
