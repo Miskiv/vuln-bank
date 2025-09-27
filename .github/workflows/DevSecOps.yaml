@@ -1,4 +1,4 @@
-name: DevSecOps Security Pipeline
+name: DevSecOps Security Pipeline - Only Scans
 
 on:
   push:
@@ -7,16 +7,20 @@ on:
     branches: [ "main" ]
 
 jobs:
-
-  # ======================
-  # STAGE 1: SETUP ENVIRONMENT
-  # ======================
-  setup:
+  security-scan:
     runs-on: self-hosted
+
     steps:
+
+      # ======================
+      # 1️⃣ CHECKOUT REPOSITORY
+      # ======================
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # ======================
+      # 2️⃣ SETUP PYTHON ENVIRONMENT
+      # ======================
       - name: Install Python Dependencies
         run: |
           py -m pip install --upgrade pip==22.0.4
@@ -36,41 +40,9 @@ jobs:
         run: |
           (Get-Content .env) -replace 'DB_HOST=db','DB_HOST=localhost' | Set-Content .env
 
-  # ======================
-  # STAGE 2: RUN FLASK APP & NGROK
-  # ======================
-  # run-app:
-  #   runs-on: self-hosted
-  #   needs: setup
-  #   steps:
-  #     - name: Install Ngrok
-  #       run: |
-  #         Invoke-WebRequest -Uri https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
-  #         Expand-Archive -Path ngrok.zip -DestinationPath .\ngrok -Force
-  #         $env:PATH += ";$PWD\ngrok"
-
-  #     - name: Start Flask App and Ngrok
-  #       id: flask-ngrok
-  #       run: |
-  #         # Start Flask app
-  #         Start-Process -FilePath "py" -ArgumentList "app.py" -NoNewWindow
-  #         Start-Sleep -Seconds 15
-
-  #         # Start Ngrok to expose port 5000
-  #         Start-Process -FilePath "ngrok.exe" -ArgumentList "http 5000" -NoNewWindow
-  #         Start-Sleep -Seconds 5
-
-  #         # Get Ngrok public URL
-  #         $ngrok_url = (Invoke-RestMethod http://127.0.0.1:4040/api/tunnels).tunnels[0].public_url
-  #         echo "::set-output name=ngrok_url::$ngrok_url"
-
-  # ======================
-  # STAGE 3: INSTALL SECURITY TOOLS
-  # ======================
-  install-tools:
-    runs-on: self-hosted
-    needs: run-app
-    steps:
+      # ======================
+      # 3️⃣ INSTALL SECURITY TOOLS
+      # ======================
       - name: Install Gitleaks
         run: |
           Invoke-WebRequest -Uri https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_windows_x64.zip -OutFile gitleaks.zip
@@ -78,49 +50,39 @@ jobs:
           $env:PATH += ";$PWD\gitleaks"
 
       - name: Install pip-audit
-        run: |
-          py -m pip install --upgrade pip-audit
+        run: py -m pip install --upgrade pip-audit
 
       - name: Install Bandit
-        run: |
-          py -m pip install bandit
+        run: py -m pip install bandit
 
-  # ======================
-  # STAGE 4: SECURITY SCANNING
-  # ======================
-  security-scan:
-    runs-on: self-hosted
-    needs: install-tools
-    steps:
+      # ======================
+      # 4️⃣ SECURITY SCANNING (lanjut walau ada finding)
+      # ======================
       - name: Run Gitleaks
-        run: |
-          try { gitleaks detect --source=. --report-path=gitleaks-report.json } catch { Write-Host "Gitleaks scan failed" }
+        continue-on-error: true
+        run: gitleaks detect --source=. --report-path=gitleaks-report.json
 
       - name: Run pip-audit
-        run: |
-          try { py -m pip_audit -r requirements.txt -f json -o sca-report.json } catch { Write-Host "pip-audit failed" }
+        continue-on-error: true
+        run: py -m pip_audit -r requirements.txt -f json -o sca-report.json
 
       - name: Run Bandit
-        run: |
-          try { bandit -r . -f json -o bandit-report.json } catch { Write-Host "Bandit failed" }
+        continue-on-error: true
+        run: bandit -r . -f json -o bandit-report.json
 
       - name: Run Dockle
-        run: |
-          try { docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile } catch { Write-Host "Dockle failed" }
+        continue-on-error: true
+        run: docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile
 
       - name: Run OWASP ZAP Baseline Scan
+        continue-on-error: true
         uses: zaproxy/action-baseline@v0.7.0
         with:
           target: "http://localhost:5000"
-        continue-on-error: true
 
-  # ======================
-  # STAGE 5: UPLOAD REPORTS
-  # ======================
-  upload-reports:
-    runs-on: self-hosted
-    needs: security-scan
-    steps:
+      # ======================
+      # 5️⃣ UPLOAD REPORTS
+      # ======================
       - name: Ensure Reports Exist
         run: |
           if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
@@ -137,7 +99,3 @@ jobs:
             sca-report.json
             bandit-report.json
             app.log
-
-      - name: Show Ngrok Public URL
-        run: |
-          Write-Host "Ngrok URL: ${{ needs.run-app.outputs.ngrok_url }}"
