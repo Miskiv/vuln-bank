@@ -8,7 +8,7 @@ on:
 
 jobs:
   security-scan:
-    runs-on: self-hosted  
+    runs-on: self-hosted
 
     steps:
       # ======================
@@ -25,7 +25,7 @@ jobs:
           py -m pip install --upgrade pip==22.0.4
           py -m pip install -r requirements.txt
 
-      - name: Create uploads directory (Windows safe)
+      - name: Create uploads directory
         run: |
           if (!(Test-Path "static\uploads")) { New-Item -ItemType Directory -Path "static\uploads" }
 
@@ -35,18 +35,32 @@ jobs:
             Set-Content -Path ".env" -Value "DB_HOST=localhost`nDB_PORT=5432`nDB_USER=postgres`nDB_PASSWORD=postgres`nDB_NAME=vulnbank`nSECRET_KEY=supersecret"
           }
 
-      - name: Update .env file (Windows)
+      - name: Update .env file
         run: |
           (Get-Content .env) -replace 'DB_HOST=db','DB_HOST=localhost' | Set-Content .env
 
       # ======================
       # RUN FLASK APP IN BACKGROUND
       # ======================
-      - name: Run Flask App in Background (Windows)
+      - name: Install Ngrok
         run: |
+          Invoke-WebRequest -Uri https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+          Expand-Archive -Path ngrok.zip -DestinationPath .\ngrok -Force
+          $env:PATH += ";$PWD\ngrok"
+
+      - name: Start Flask App and Ngrok
+        run: |
+          # Start Flask app
           Start-Process -FilePath "py" -ArgumentList "app.py" -NoNewWindow
-          # Tunggu app siap sebelum scan
           Start-Sleep -Seconds 15
+
+          # Start Ngrok to expose port 5000
+          Start-Process -FilePath "ngrok.exe" -ArgumentList "http 5000" -NoNewWindow
+          Start-Sleep -Seconds 5
+
+          # Get Ngrok public URL
+          $ngrok_url = (Invoke-RestMethod http://127.0.0.1:4040/api/tunnels).tunnels[0].public_url
+          Write-Host "Ngrok Public URL: $ngrok_url"
 
       # ======================
       # INSTALL SECURITY TOOLS
@@ -68,60 +82,44 @@ jobs:
       # ======================
       # SECURITY SCANNING
       # ======================
-      # - name: Run Gitleaks
-      #   run: |
-      #     try {
-      #         gitleaks detect --source=. --report-path=gitleaks-report.json
-      #     } catch {
-      #         Write-Host "Gitleaks scan failed, continuing..."
-      #     }
+      - name: Run Gitleaks
+        run: |
+          try { gitleaks detect --source=. --report-path=gitleaks-report.json } catch { Write-Host "Gitleaks failed" }
 
-      # - name: Run pip-audit
-      #   run: |
-      #     try {
-      #         py -m pip_audit -r requirements.txt -f json -o sca-report.json
-      #     } catch {
-      #         Write-Host "pip-audit failed, continuing..."
-      #     }
+      - name: Run pip-audit
+        run: |
+          try { py -m pip_audit -r requirements.txt -f json -o sca-report.json } catch { Write-Host "pip-audit failed" }
 
-      # - name: Run Bandit
-      #   run: |
-      #     try {
-      #         bandit -r . -f json -o bandit-report.json
-      #     } catch {
-      #         Write-Host "Bandit scan failed, continuing..."
-      #     }
+      - name: Run Bandit
+        run: |
+          try { bandit -r . -f json -o bandit-report.json } catch { Write-Host "Bandit failed" }
 
-      # - name: Run Dockle
-      #   run: |
-      #     try {
-      #         docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile
-      #     } catch {
-      #         Write-Host "Dockle scan failed, continuing..."
-      #     }
+      - name: Run Dockle
+        run: |
+          try { docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile } catch { Write-Host "Dockle failed" }
 
-      # - name: Run OWASP ZAP Baseline Scan
-      #   uses: zaproxy/action-baseline@v0.7.0
-      #   with:
-      #     target: "http://localhost:5000"
-      #   continue-on-error: true
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.7.0
+        with:
+          target: "http://localhost:5000"
+        continue-on-error: true
 
-      # # ======================
-      # # SAVE REPORTS
-      # # ======================
-      # - name: Ensure report files exist
-      #   run: |
-      #     if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
-      #     if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
-      #     if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
-      #     if (!(Test-Path "app.log")) { '' | Out-File app.log }
+      # ======================
+      # SAVE REPORTS
+      # ======================
+      - name: Ensure report files exist
+        run: |
+          if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
+          if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
+          if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
+          if (!(Test-Path "app.log")) { '' | Out-File app.log }
 
-      # - name: Upload scan reports
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: security-reports
-      #     path: |
-      #       gitleaks-report.json
-      #       sca-report.json
-      #       bandit-report.json
-      #       app.log
+      - name: Upload scan reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            gitleaks-report.json
+            sca-report.json
+            bandit-report.json
+            app.log
