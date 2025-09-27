@@ -60,7 +60,8 @@ jobs:
       # ======================
       - name: Run Gitleaks
         continue-on-error: true
-        run: gitleaks detect --source=. --report-path=gitleaks-report.json
+        run: .\gitleaks\gitleaks.exe detect --source=. --report-path=gitleaks-report.json
+
 
       - name: Run pip-audit
         continue-on-error: true
@@ -68,7 +69,7 @@ jobs:
 
       - name: Run Bandit
         continue-on-error: true
-        run: bandit -r . -f json -o bandit-report.json
+        run: py -m bandit -r . -f json -o bandit-report.json
 
       - name: Run Dockle
         continue-on-error: true
