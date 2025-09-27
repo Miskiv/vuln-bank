@@ -12,51 +12,49 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4   # versi terbaru
 
       # ======================
       # LOCAL INSTALLATION STEPS
       # ======================
       - name: Install dependencies
         run: |
+          py -m pip install --upgrade pip==22.0.4
           py -m pip install -r requirements.txt
 
-      # - name: Create uploads directory
-      #   run: |
-      #     mkdir -p static/uploads
-
-      - name: Update .env file
+      - name: Create uploads directory (Windows safe)
         run: |
-          sed -i 's/DB_HOST=db/DB_HOST=localhost/' .env
+          if (!(Test-Path "static\uploads")) { New-Item -ItemType Directory -Path "static\uploads" }
 
-      - name: Run Flask App in Background
+      - name: Update .env file (Windows)
         run: |
-          source venv/bin/activate
-          nohup python app.py > app.log 2>&1 &
-          sleep 10
+          (Get-Content .env) -replace 'DB_HOST=db','DB_HOST=localhost' | Set-Content .env
+
+      - name: Run Flask App in Background (Windows)
+        run: |
+          Start-Process -FilePath "py" -ArgumentList "app.py" -NoNewWindow
+          Start-Sleep -Seconds 10
 
       # ======================
       # SECURITY SCANNING
       # ======================
       - name: Run Gitleaks
         run: |
-          gitleaks detect --source=. --report-path=gitleaks-report.json || true
+          gitleaks detect --source=. --report-path=gitleaks-report.json || exit 0
 
       - name: Run pip-audit
         run: |
-          source venv/bin/activate
           py -m pip install pip-audit
-          pip-audit -r requirements.txt -f json -o sca-report.json || true
+          py -m pip-audit -r requirements.txt -f json -o sca-report.json || exit 0
 
       - name: Run Bandit
         run: |
-          source venv/bin/activate
           py -m pip install bandit
-          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -f json -o bandit-report.json || exit 0
 
       - name: Run Dockle
         run: |
-          docker run --rm -v $(pwd):/app goodwithtech/dockle:latest /app/Dockerfile || true
+          docker run --rm -v ${PWD}:/app goodwithtech/dockle:latest /app/Dockerfile || exit 0
 
       - name: Run OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.7.0
@@ -76,4 +74,3 @@ jobs:
             sca-report.json
             bandit-report.json
             app.log
-
