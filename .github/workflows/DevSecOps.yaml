@@ -150,6 +150,11 @@ jobs:
         with:
           target: "http://localhost:5000"
 
+      - name: Ensure DAST Reports Exist
+        run: |
+          if (!(Test-Path "report.html")) { '' | Out-File report.html }
+          if (!(Test-Path "report.md")) { '' | Out-File report.md }
+
       - name: Upload DAST Report
         uses: actions/upload-artifact@v4
         with:
