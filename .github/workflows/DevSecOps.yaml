@@ -21,9 +21,9 @@ jobs:
         run: |
           py -m pip install -r requirements.txt
 
-      - name: Create uploads directory
-        run: |
-          mkdir -p static/uploads
+      # - name: Create uploads directory
+      #   run: |
+      #     mkdir -p static/uploads
 
       - name: Update .env file
         run: |
