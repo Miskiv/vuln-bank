@@ -1,4 +1,4 @@
-name: DevSecOps Security Pipeline with Stages
+name: DevSecOps Security Pipeline
 
 on:
   push:
