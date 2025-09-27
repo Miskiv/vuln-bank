@@ -121,7 +121,7 @@ jobs:
             sca-report.json
             bandit-report.json
             trivy-dockerfile-report.json
-# ======================
+  # ======================
   # 4️⃣ RUN DAST SCAN
   # ======================
   dast-scan:
@@ -187,37 +187,35 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          send_slack_notification() {
-              local message=$1
-              local webhook_url=$2
-              if [ -n "$webhook_url" ]; then
-                  curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"$message\"}" $webhook_url
-              else
-                  echo "SLACK_WEBHOOK_URL is not set. Skipping Slack notification."
-              fi
+          $CRITICAL_FOUND = $false
+          $NOTIFICATION_MESSAGE = "⚠️ *Peringatan Keamanan!* Kerentanan _critical_ ditemukan pada repositori vulnbank.`n"
+
+          # --- Analisis Laporan Keamanan ---
+          if (Get-Content bandit-report.json | Select-String -Pattern "CRITICAL" -Quiet) {
+              $CRITICAL_FOUND = $true
+              $NOTIFICATION_MESSAGE += "• Kerentanan SAST (Bandit) dengan tingkat CRITICAL terdeteksi.`n"
           }
           
-          CRITICAL_FOUND="false"
-          NOTIFICATION_MESSAGE="⚠️ *Peringatan Keamanan!* Kerentanan _critical_ ditemukan pada repositori vulnbank.\n"
+          if (Get-Content trivy-dockerfile-report.json | Select-String -Pattern "`"Severity`":`"CRITICAL`"" -Quiet) {
+              $CRITICAL_FOUND = $true
+              $NOTIFICATION_MESSAGE += "• Misconfiguration CRITICAL (Trivy) terdeteksi di Dockerfile.`n"
+          }
           
-          if cat bandit-report.json | grep -q "CRITICAL"; then
-              CRITICAL_FOUND="true"
-              NOTIFICATION_MESSAGE+="• Kerentanan SAST (Bandit) dengan tingkat CRITICAL terdeteksi.\n"
-          fi
-          
-          if cat trivy-dockerfile-report.json | grep -q "\"Severity\":\"CRITICAL\""; then
-              CRITICAL_FOUND="true"
-              NOTIFICATION_MESSAGE+="• Misconfiguration CRITICAL (Trivy) terdeteksi di Dockerfile.\n"
-          fi
-          
-          if cat sca-report.json | grep -q "\"severity\": \"high\""; then
-              CRITICAL_FOUND="true"
-              NOTIFICATION_MESSAGE+="• Kerentanan SCA (pip-audit) dengan tingkat HIGH terdeteksi.\n"
-          fi
-          
-          if [ "$CRITICAL_FOUND" = "true" ]; then
-              echo "Kerentanan critical ditemukan. Mengirim notifikasi ke Slack..."
-              send_slack_notification "$NOTIFICATION_MESSAGE" "$SLACK_WEBHOOK_URL"
-          else
+          if (Get-Content sca-report.json | Select-String -Pattern "`"severity`": `"high`"" -Quiet) {
+              $CRITICAL_FOUND = $true
+              $NOTIFICATION_MESSAGE += "• Kerentanan SCA (pip-audit) dengan tingkat HIGH terdeteksi.`n"
+          }
+
+          # --- Kirim Notifikasi jika Perlu ---
+          if ($CRITICAL_FOUND -eq $true) {
+              if (-not [string]::IsNullOrEmpty($env:SLACK_WEBHOOK_URL)) {
+                  echo "Kerentanan critical ditemukan. Mengirim notifikasi ke Slack..."
+                  $payload = @{ "text" = $NOTIFICATION_MESSAGE }
+                  $jsonPayload = $payload | ConvertTo-Json -Compress
+                  curl -X POST -H 'Content-type: application/json' --data $jsonPayload $env:SLACK_WEBHOOK_URL
+              } else {
+                  echo "SLACK_WEBHOOK_URL is not set. Skipping Slack notification."
+              }
+          } else {
               echo "Tidak ada kerentanan critical yang ditemukan. Tidak ada notifikasi yang dikirim."
-          fi
+          }
