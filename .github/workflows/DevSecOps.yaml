@@ -11,13 +11,16 @@ jobs:
     runs-on: self-hosted  
 
     steps:
+      # ======================
+      # CHECKOUT REPO
+      # ======================
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ======================
-      # LOCAL INSTALLATION STEPS
+      # INSTALL DEPENDENCIES
       # ======================
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           py -m pip install --upgrade pip==22.0.4
           py -m pip install -r requirements.txt
@@ -36,24 +39,27 @@ jobs:
         run: |
           (Get-Content .env) -replace 'DB_HOST=db','DB_HOST=localhost' | Set-Content .env
 
+      # ======================
+      # RUN FLASK APP IN BACKGROUND
+      # ======================
       - name: Run Flask App in Background (Windows)
         run: |
           Start-Process -FilePath "py" -ArgumentList "app.py" -NoNewWindow
-          Start-Sleep -Seconds 10
+          # Tunggu app siap sebelum scan
+          Start-Sleep -Seconds 15
 
       # ======================
       # INSTALL SECURITY TOOLS
       # ======================
-
       - name: Install Gitleaks
         run: |
           Invoke-WebRequest -Uri https://github.com/gitleaks/gitleaks/releases/download/v8.18.2/gitleaks_8.18.2_windows_x64.zip -OutFile gitleaks.zip
-          Expand-Archive -Path gitleaks.zip -DestinationPath . -Force
-          $env:PATH += ";$PWD"
+          Expand-Archive -Path gitleaks.zip -DestinationPath .\gitleaks -Force
+          $env:PATH += ";$PWD\gitleaks"
 
       - name: Install pip-audit
         run: |
-          py -m pip install pip-audit
+          py -m pip install --upgrade pip-audit
 
       - name: Install Bandit
         run: |
@@ -62,22 +68,37 @@ jobs:
       # ======================
       # SECURITY SCANNING
       # ======================
-
       - name: Run Gitleaks
         run: |
-          .\gitleaks.exe detect --source=. --report-path=gitleaks-report.json || exit 0
+          try {
+              gitleaks detect --source=. --report-path=gitleaks-report.json
+          } catch {
+              Write-Host "Gitleaks scan failed, continuing..."
+          }
 
       - name: Run pip-audit
         run: |
-          py -m pip-audit -r requirements.txt -f json -o sca-report.json || exit 0
+          try {
+              py -m pip_audit -r requirements.txt -f json -o sca-report.json
+          } catch {
+              Write-Host "pip-audit failed, continuing..."
+          }
 
       - name: Run Bandit
         run: |
-          bandit -r . -f json -o bandit-report.json || exit 0
+          try {
+              bandit -r . -f json -o bandit-report.json
+          } catch {
+              Write-Host "Bandit scan failed, continuing..."
+          }
 
       - name: Run Dockle
         run: |
-          docker run --rm -v ${PWD}:/app goodwithtech/dockle:latest /app/Dockerfile || exit 0
+          try {
+              docker run --rm -v "${PWD}:/app" goodwithtech/dockle:latest /app/Dockerfile
+          } catch {
+              Write-Host "Dockle scan failed, continuing..."
+          }
 
       - name: Run OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.7.0
@@ -88,6 +109,13 @@ jobs:
       # ======================
       # SAVE REPORTS
       # ======================
+      - name: Ensure report files exist
+        run: |
+          if (!(Test-Path "gitleaks-report.json")) { '{}' | Out-File gitleaks-report.json }
+          if (!(Test-Path "sca-report.json")) { '{}' | Out-File sca-report.json }
+          if (!(Test-Path "bandit-report.json")) { '{}' | Out-File bandit-report.json }
+          if (!(Test-Path "app.log")) { '' | Out-File app.log }
+
       - name: Upload scan reports
         uses: actions/upload-artifact@v4
         with:
