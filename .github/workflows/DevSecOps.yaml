@@ -39,30 +39,30 @@ jobs:
   # ======================
   # STAGE 2: RUN FLASK APP & NGROK
   # ======================
-  run-app:
-    runs-on: self-hosted
-    needs: setup
-    steps:
-      - name: Install Ngrok
-        run: |
-          Invoke-WebRequest -Uri https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
-          Expand-Archive -Path ngrok.zip -DestinationPath .\ngrok -Force
-          $env:PATH += ";$PWD\ngrok"
+  # run-app:
+  #   runs-on: self-hosted
+  #   needs: setup
+  #   steps:
+  #     - name: Install Ngrok
+  #       run: |
+  #         Invoke-WebRequest -Uri https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+  #         Expand-Archive -Path ngrok.zip -DestinationPath .\ngrok -Force
+  #         $env:PATH += ";$PWD\ngrok"
 
-      - name: Start Flask App and Ngrok
-        id: flask-ngrok
-        run: |
-          # Start Flask app
-          Start-Process -FilePath "py" -ArgumentList "app.py" -NoNewWindow
-          Start-Sleep -Seconds 15
+  #     - name: Start Flask App and Ngrok
+  #       id: flask-ngrok
+  #       run: |
+  #         # Start Flask app
+  #         Start-Process -FilePath "py" -ArgumentList "app.py" -NoNewWindow
+  #         Start-Sleep -Seconds 15
 
-          # Start Ngrok to expose port 5000
-          Start-Process -FilePath "ngrok.exe" -ArgumentList "http 5000" -NoNewWindow
-          Start-Sleep -Seconds 5
+  #         # Start Ngrok to expose port 5000
+  #         Start-Process -FilePath "ngrok.exe" -ArgumentList "http 5000" -NoNewWindow
+  #         Start-Sleep -Seconds 5
 
-          # Get Ngrok public URL
-          $ngrok_url = (Invoke-RestMethod http://127.0.0.1:4040/api/tunnels).tunnels[0].public_url
-          echo "::set-output name=ngrok_url::$ngrok_url"
+  #         # Get Ngrok public URL
+  #         $ngrok_url = (Invoke-RestMethod http://127.0.0.1:4040/api/tunnels).tunnels[0].public_url
+  #         echo "::set-output name=ngrok_url::$ngrok_url"
 
   # ======================
   # STAGE 3: INSTALL SECURITY TOOLS
