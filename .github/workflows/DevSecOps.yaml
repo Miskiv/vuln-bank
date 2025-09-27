@@ -79,6 +79,18 @@ jobs:
         continue-on-error: true
         run: .\trivy\trivy.exe config . --format json --output trivy-dockerfile-report.json
 
+      - name: Add Git Bash to PATH for ZAP action
+        run: |
+          # Menambahkan lokasi tools (seperti 'touch') dari Git ke PATH
+          # Lokasi bisa berbeda tergantung instalasi Git Anda
+          echo "C:\Program Files\Git\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Start Application in Background
+        run: |
+          # 'Start-Process' untuk menjalankan di background pada PowerShell
+          Start-Process python -ArgumentList "app.py"
+          # Beri waktu beberapa detik agar server aplikasi siap
+          Start-Sleep -Seconds 15
 
       - name: Run OWASP ZAP Baseline Scan
         continue-on-error: true
@@ -107,3 +119,5 @@ jobs:
             bandit-report.json
             trivy-dockerfile-report.json
             app.log
+            report.html
+            report.md
